@@ -12,6 +12,10 @@ using Java.IO;
 using System.Security.Cryptography.X509Certificates;
 using System.Globalization;
 using Android.OS;
+using Java.Lang.Reflect;
+using Org.Apache.Http.Impl.Auth;
+using Org.Apache.Http.Message;
+using Org.Apache.Http.Authentication;
 
 namespace ModernHttpClient
 {
@@ -79,6 +83,10 @@ namespace ModernHttpClient
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+			if ((this.Credentials != null) && (this.Credentials.GetCredential(request.RequestUri, "Digest") != null)) {
+				client.SetAuthenticator (new DigestAuthenticator (this.Credentials));
+			}
+
             var java_uri = request.RequestUri.GetComponents(UriComponents.AbsoluteUri, UriFormat.UriEscaped);
             var url = new Java.Net.URL(java_uri);
 
@@ -191,6 +199,40 @@ namespace ModernHttpClient
             }
         }
     }
+
+	public class DigestAuthenticator : Java.Lang.Object, IAuthenticator {
+		System.Net.ICredentials credentials;
+
+		public DigestAuthenticator(System.Net.ICredentials credentials)
+		{
+			this.credentials = credentials;
+		}
+
+		public Request Authenticate (Java.Net.Proxy proxy, Response response)
+		{
+			string authHeader = buildAuthorizationHeader(response);
+
+			return response.Request().NewBuilder().AddHeader("Authorization", authHeader).Build();
+		}
+
+		public Request AuthenticateProxy (Java.Net.Proxy proxy, Response response)
+		{
+			return null;
+		}
+
+		private string buildAuthorizationHeader(Response response) {
+			DigestScheme scheme = new DigestScheme ();
+			scheme.ProcessChallenge(new BasicHeader("WWW-Authenticate", response.Header("WWW-Authenticate")));
+			BasicHttpRequest request = new BasicHttpRequest(
+				response.Request().Method(), 
+				response.Request().Uri().ToString());
+			string uriString = response.Request ().Uri ().ToString ();
+			var username = credentials.GetCredential (new Uri (uriString), "Digest").UserName;
+			var password = credentials.GetCredential (new Uri (uriString), "Digest").Password;
+			Org.Apache.Http.Authentication.ICredentials javaCredentials = new UsernamePasswordCredentials (username, password);
+			return scheme.Authenticate(javaCredentials, request).Value;
+		}
+	}
 
     class HostnameVerifier : Java.Lang.Object, IHostnameVerifier
     {

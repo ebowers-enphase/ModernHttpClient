@@ -279,6 +279,12 @@ namespace ModernHttpClient
                     return;
                 }
 
+				if (challenge.ProtectionSpace.AuthenticationMethod.Contains("NSURLAuthenticationMethodHTTPDigest")) {
+					var credentials = This.Credentials.GetCredential (task.CurrentRequest.Url, "Digest");
+					completionHandler(NSUrlSessionAuthChallengeDisposition.UseCredential,NSUrlCredential.FromUserPasswordPersistance (credentials.UserName, credentials.Password, NSUrlCredentialPersistence.ForSession));
+					return;
+				}
+
                 if (!This.customSSLVerification) {
                     goto doDefault;
                 }
